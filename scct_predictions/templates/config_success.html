@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<head>
+</head>
+<html>
+  <body>
+    <h1>Configuration Successful</h1>
+    This page can now be closed.
+    <h2>To setup Stream Deck</h2>
+    <p>
+
+        1. In the Stream Deck desktop application, create a new folder called "Predictions"<br>
+        2. Add a System --> Website action, called "Create"<br>
+        2. Set the url to "http://localhost:{{app_port}}/predictions/create"<br>
+        3. Ensure "GET request in background" is ticked<br>
+        4. (OPTIONAL) You can create additional actions at these endpoints:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;(a) Lock the prediction: http://localhost:{{app_port}}/predictions/lock<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;(b) Payout the prediction: http://localhost:{{app_port}}/predictions/payout<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;(c) Cancel the prediction: http://localhost:{{app_port}}/predictions/cancel<br><br>
+    </p>
+    <h2>To start a prediction</h2>
+    <p>
+        1. Ensure SCCT is pre-filled with the current match details and the match is selected<br>
+        2. Press the "Create" button on the stream deck<br>
+    </p>
+    <h2>To lock a prediction</h2>
+    <p>
+        1. Press the "Lock" button on the stream deck<br>
+    </p>
+    <h2>To pay out a prediction</h2>
+    <p>
+        1. Ensure the match is updated in SCCT<br>
+        2. Press the "Payout" button on the stream deck<br>
+        3. The tool should automatically payout the correct result<br>
+    </p>
+    <h2>To cancel a prediction</h2>
+    <p>
+        1. Press the "Cancel" button on the stream deck<br>
+    </p>
+  </body>
+</html>

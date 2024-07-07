@@ -1,0 +1,44 @@
+
+[project]
+name = "scct_predictions"
+description = "Create Twitch predictions based on SCCT data"
+version = "0.0.1"
+authors = [
+    { name = "Jaedolph - Lord of Games" }
+]
+dependencies = [
+    "Flask[async]",
+    "Flask-WTF",
+    "websocket-client",
+    "twitchAPI",
+]
+
+[project.scripts]
+scct_predictions = "scct_predictions.__main__:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["scct_predictions"]
+
+[tool.black]
+line-length = 100
+
+[tool.docformatter]
+wrap-summaries = 100
+wrap-descriptions = 100
+
+[tool.pylint]
+load-plugins = ["pylint.extensions.docparams", "pylint.extensions.docstyle"]
+max-args = 10
+max-attributes = 10
+
+[[tool.mypy.overrides]]
+module = "flask_wtf"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "flask_wtf.csrf"
+ignore_missing_imports = true

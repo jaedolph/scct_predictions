@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<head>
+</head>
+<html>
+  <body>
+        <h1>Setup Instructions</h1>
+        <p>
+            1. Create a new application at:  <a href="https://dev.twitch.tv/console/apps/create">https://dev.twitch.tv/console/apps/create</a><br>
+            2. Set "Name" to whatever you want e.g. "scct_predictions"<br>
+            3. Add an "OAuth Redirect URL" to http://localhost:{{ app_port }}/configure/confirm<br>
+            4. Set "Category" to "Application Integration"<br>
+            5. Set "Client" to "Confidential"<br>
+            6. Click the "I'm not a robot" verification and click "Create"<br>
+            7. Click "manage" on the application you have created<br>
+            8. Click "New Secret" to generate a "Client Secret"<br>
+            9. Copy/paste the "Client ID" and "Client Secret" in to the form below<br>
+            10. Fill in any other fields and click "Submit"
+        </p>
+        <h1>Configuration Form</h1>
+        {% from "_formhelpers.html" import render_field %}
+        <form method=post>
+        <dl>
+            {{ form.csrf_token }}
+            {{ render_field(form.client_id) }}
+            {{ render_field(form.client_secret) }}
+            {{ render_field(form.broadcaster_name) }}
+            {{ render_field(form.prediction_window) }}
+        </dl>
+        <p><input type=submit value=Submit>
+        </form>
+  </body>
+</html>

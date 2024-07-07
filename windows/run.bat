@@ -1,0 +1,1 @@
+start "SCCT Predictions" __main__.dist/scct_predictions.exe
