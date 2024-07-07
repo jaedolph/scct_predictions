@@ -13,9 +13,9 @@ jobs:
       with:
         python-version: 3.11
 
-    - run: pip install . nuitka
     - name: Build Windows binaries
       run: |
+        $ErrorActionPreference = "Stop"
 
         New-Item -Path ".\build\scct_predictions" -ItemType "directory"
 
@@ -25,7 +25,7 @@ jobs:
         Copy-Item .\windows\python312._pth .\build\scct_predictions\python\python312._pth
 
         Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile .\build\get-pip.py
-        .\build\scct_predictions\python\python.exe get-pip.py
+        .\build\scct_predictions\python\python.exe .\build\get-pip.py
 
         .\build\scct_predictions\python\python.exe -m pip install .
 
