@@ -1,1 +1,1 @@
-start "SCCT Predictions" __main__.dist/scct_predictions.exe
+start "SCCT Predictions" python/Scripts/scct_predictions.exe
