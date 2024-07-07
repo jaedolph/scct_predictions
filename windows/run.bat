@@ -1,1 +1,1 @@
-start "SCCT Predictions" python/Scripts/scct_predictions.exe
+start "SCCT Predictions" data\python\Scripts\scct_predictions.exe

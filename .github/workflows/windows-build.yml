@@ -1,41 +1,30 @@
-name: Release Windows binaries
+name: Release Windows build
 
 on:
   release:
     types: [published]
 jobs:
   build:
-    runs-on: 'windows-latest'
+    runs-on: 'ubuntu-latest'
 
     steps:
     - uses: actions/checkout@v3
     - uses: actions/setup-python@v4
       with:
-        python-version: 3.11
-
-    - name: Build Windows binaries
+        python-version: 3.12
+    - name: Build wheel
       run: |
-        $ErrorActionPreference = "Stop"
+          python -m pip install --upgrade build
 
-        New-Item -Path ".\build\scct_predictions" -ItemType "directory"
-
-        Invoke-WebRequest -Uri https://www.python.org/ftp/python/3.12.4/python-3.12.4-embed-amd64.zip -OutFile .\build\python.zip
-        Expand-Archive -LiteralPath .\build\python.zip -DestinationPath .\build\scct_predictions\python\ -Force
-
-        Copy-Item .\windows\python312._pth .\build\scct_predictions\python\python312._pth
-
-        Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile .\build\get-pip.py
-        .\build\scct_predictions\python\python.exe .\build\get-pip.py
-
-        .\build\scct_predictions\python\python.exe -m pip install .
-
-        Copy-Item .\windows\run.bat .\build\scct_predictions
-        Copy-Item .\windows\README.txt .\build\scct_predictions
-        cd build
-        powershell Compress-Archive scct_predictions scct_predictions-${{github.ref_name }}-windows-amd64.zip
+          mkdir -p ./dist/scct_predictions/data
+          python -m build --wheel --outdir ./dist/scct_predictions/data .
+    - name: Make zip file
+      run: |
+        cp -r windows/* ./dist/scct_predictions
+        cd ./dist/
+        zip -r scct_predictions-${{github.ref_name }}-windows-amd64.zip scct_predictions
     - name: Upload release artifiacts
       run: |
-        gh release upload ${{github.event.release.tag_name}} build/scct_predictions-${{github.ref_name }}-windows-amd64.zip
+        gh release upload ${{github.event.release.tag_name}} dist/scct_predictions-${{github.ref_name }}-windows-amd64.zip
       env:
         GITHUB_TOKEN: ${{ github.TOKEN }}
-      shell: bash
