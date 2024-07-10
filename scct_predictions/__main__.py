@@ -1,10 +1,12 @@
 """Main program."""
 
+import logging
 import asyncio
 import uuid
 import webbrowser
+import argparse
 
-from flask import Flask, make_response, redirect, render_template, request
+from flask import Flask, make_response, redirect, render_template, request, abort
 from flask_wtf import FlaskForm
 from flask_wtf.csrf import CSRFProtect
 from twitchAPI.helper import first
@@ -26,6 +28,8 @@ csrf = CSRFProtect(app)
 twitch: Twitch
 auth: UserAuthenticator
 config: PredictionsConfig
+
+LOG = logging.getLogger(__name__)
 
 
 class ConfigForm(FlaskForm):  # type: ignore
@@ -49,13 +53,24 @@ class ConfigForm(FlaskForm):  # type: ignore
     )
 
 
+@app.errorhandler(500)
+def internal_error(error: str) -> str:
+    """Ensure 500 error messages also get logged.
+
+    :param error: error message
+    """
+
+    LOG.error(error)
+    return str(error)
+
+
 @app.route("/predictions/create", methods=["GET"])  # type: ignore
 async def predictions_create() -> Response:
     """Creates a prediction based on the current match in SCCT."""
     try:
         match = scct.get_match_details()
     except scct.SCCTError as exp:
-        return make_response(f"Failed to create prediction: {exp}", 500)
+        return abort(500, f"Failed to create prediction: {exp}")
 
     prediction_title = f"{match.team1} vs {match.team2} (BO{match.bestof})"
     draw_possible = (match.bestof % 2) == 0
@@ -77,8 +92,8 @@ async def predictions_create() -> Response:
             config.prediction_window,
         )
     except TwitchAPIException as exp:
-        app.logger.error("Failed to start prediction: %s", exp)
-        return make_response(f"Failed to create prediction {exp}", 500)
+        return abort(500, f"Failed to create prediction {exp}")
+    LOG.info("Created prediction - %s", prediction_title)
     return make_response(f"Created prediction - {prediction_title}")
 
 
@@ -94,8 +109,8 @@ async def predictions_lock() -> Response:
 
         await twitch.end_prediction(broadcaster.id, prediction.id, PredictionStatus.LOCKED)
     except TwitchAPIException as exp:
-        app.logger.error("Failed to lock prediction: %s", exp)
-        return make_response(f"Failed to lock prediction {exp}", 500)
+        return abort(500, f"Failed to lock prediction {exp}")
+    LOG.info("Locked prediction")
     return make_response("Locked prediction")
 
 
@@ -111,8 +126,8 @@ async def predictions_cancel() -> Response:
 
         await twitch.end_prediction(broadcaster.id, prediction.id, PredictionStatus.CANCELED)
     except TwitchAPIException as exp:
-        app.logger.error("Failed to cancel prediction: %s", exp)
-        return make_response(f"Failed to cancel prediction {exp}", 500)
+        return abort(500, f"Failed to cancel prediction {exp}")
+    LOG.info("Cancelled prediction")
     return make_response("Cancelled prediction")
 
 
@@ -122,7 +137,7 @@ async def predictions_payout() -> Response:
     try:
         match = scct.get_match_details()
     except scct.SCCTError as exp:
-        return make_response(f"Failed to payout prediction: {exp}", 500)
+        abort(500, f"Failed to payout prediction: {exp}")
 
     winning_outcome = ""
 
@@ -137,10 +152,10 @@ async def predictions_payout() -> Response:
     ):
         winning_outcome = f"{match.draw_score} - {match.draw_score}"
     else:
-        return make_response(
+        return abort(
+            500,
             "Could not determine outcome, match may not be finished: "
             f"{match.team1} {match.score2} - {match.team2} {match.score2}",
-            500,
         )
 
     try:
@@ -156,15 +171,15 @@ async def predictions_payout() -> Response:
                 winning_outcome_id = outcome.id
                 break
         if not winning_outcome_id:
-            return make_response("Error, could not find winning outcome", 500)
+            return abort(500, "could not find winning outcome")
 
         await twitch.end_prediction(
             broadcaster.id, prediction.id, PredictionStatus.RESOLVED, winning_outcome_id
         )
     except TwitchAPIException as exp:
-        app.logger.error("Failed to payout prediction: %s", exp)
-        return make_response(f"Failed to payout prediction {exp}", 500)
+        return abort(500, f"Failed to payout prediction {exp}")
 
+    LOG.info("Paid out prediction, result: %s", winning_outcome)
     return make_response(f"Paid out prediction, result: {winning_outcome}")
 
 
@@ -201,11 +216,12 @@ async def login_confirm() -> Response:
     """Parse details from Twitch Oauth redirect and finish configuration."""
 
     state = request.args.get("state")
+    LOG.debug("got state: %s", state)
     if state != auth.state:
-        return make_response("Bad state", 401)
+        return abort(400, "bad state")
     code = request.args.get("code")
     if code is None:
-        return make_response("Missing code", 400)
+        return abort(400, "missing code")
     try:
         config.auth_token, config.refresh_token = await auth.authenticate(user_token=code)
         await twitch.set_user_authentication(config.auth_token, TARGET_SCOPE, config.refresh_token)
@@ -213,7 +229,7 @@ async def login_confirm() -> Response:
         config.validate_twitch_section()
         config.write_config()
     except TwitchAPIException:
-        return make_response("Failed to generate auth token", 400)
+        return abort(400, "failed to generate auth token")
 
     return make_response(render_template("config_success.html", app_port=APP_PORT))
 
@@ -228,17 +244,45 @@ async def twitch_setup() -> None:
         twitch = await Twitch(config.client_id, config.client_secret)
         await twitch.set_user_authentication(config.auth_token, TARGET_SCOPE, config.refresh_token)
     except PredictionsConfigError as exp:
-        print(f"Bad config: {exp}")
+        logging.error("Bad config: %s", exp)
         config = PredictionsConfig(CONFIG_FILE)
         config.new_config()
 
+        logging.debug("opening configuration form in browser")
         browser = webbrowser.get()
         browser.open(f"http://localhost:{APP_PORT}/configure")
 
 
 def main() -> None:
     """Main entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="scct_predictions",
+        description="Creates and pays out Twitch predictions based on data from SCCT.",
+    )
+    parser.add_argument("--debug", action="store_true", help="turn on debug logging")
+    parser.add_argument("--log-file", help="path to log file")
+    args = parser.parse_args()
+
+    # configure logging
+    log_level = logging.INFO
+    log_handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if args.debug:
+        LOG.info("setting log level to DEBUG")
+        log_level = logging.DEBUG
+        LOG.debug("test logging")
+
+    if args.log_file:
+        log_handlers.append(logging.FileHandler(args.log_file))
+
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)s %(message)s",
+        level=log_level,
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=log_handlers,
+    )
+    logging.debug("generating secret key")
     app.secret_key = uuid.uuid4().hex
+
     asyncio.run(twitch_setup())
     csrf.init_app(app)
     app.run(port=APP_PORT)
