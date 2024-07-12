@@ -72,7 +72,7 @@ async def predictions_create() -> Response:
     except scct.SCCTError as exp:
         return abort(500, f"Failed to create prediction: {exp}")
 
-    prediction_title = f"{match.team1} vs {match.team2} (BO{match.bestof})"
+    prediction_title = f"{match.league} (BO{match.bestof})"
     draw_possible = (match.bestof % 2) == 0
 
     prediction_options = []
