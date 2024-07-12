@@ -13,7 +13,7 @@ Copy-Item .\data\python312._pth .\data\python\python312._pth
 Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile .\build\get-pip.py
 .\data\python\python.exe .\build\get-pip.py --no-warn-script-location
 
-.\data\python\python.exe -m pip install .\data\scct_predictions-0.1.0-py3-none-any.whl --no-warn-script-location
+.\data\python\python.exe -m pip install .\data\scct_predictions-0.2.0-py3-none-any.whl --no-warn-script-location
 
 Remove-Item -LiteralPath ".\build" -Force -Recurse
 

@@ -2,7 +2,7 @@
 [project]
 name = "scct_predictions"
 description = "Create Twitch predictions based on SCCT data"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
     { name = "Jaedolph - Lord of Games" }
 ]
