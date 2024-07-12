@@ -39,7 +39,8 @@ class MatchDetails:
         return (
             f'MatchDetails(team1="{self.team1}",team2="{self.team2}",'
             f"bestof={self.bestof},score1={self.score1},score2={self.score2},"
-            f"draw_possible={self.draw_possible},winning_score={self.winning_score})"
+            f"draw_possible={self.draw_possible},winning_score={self.winning_score},"
+            f"league={self.league})"
         )
 
     def __post_init__(self) -> None:
