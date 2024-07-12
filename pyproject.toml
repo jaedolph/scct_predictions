@@ -9,7 +9,6 @@ authors = [
 dependencies = [
     "Flask[async]",
     "Flask-WTF",
-    "websocket-client",
     "twitchAPI",
 ]
 

@@ -1,16 +1,12 @@
 """Functions for getting data from SCCT."""
 
 import os
-import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 import socket
 from contextlib import closing
 
-from websocket import WebSocketTimeoutException, create_connection
-
-SCCT_SCORE_WEBSOCKET = "ws://localhost:{}/score"
 LOG = logging.getLogger(__name__)
 
 HOMEDIR = str(Path.home())
@@ -33,6 +29,7 @@ class MatchDetails:
     bestof: int
     score1: int
     score2: int
+    league: str
     winning_score: int = -1
     draw_possible: bool = False
     draw_score: int = -1
@@ -58,6 +55,8 @@ class MatchDetails:
             raise ValueError("Bad value for score1")
         if not isinstance(self.score2, int):
             raise ValueError("Bad value for score2")
+        if not isinstance(self.league, str):
+            raise ValueError("Bad value for league")
 
         self.draw_possible = (self.bestof % 2) == 0
         self.winning_score = int(self.bestof / 2) + 1
@@ -72,29 +71,23 @@ def get_match_details() -> MatchDetails:
     :return: current match details from SCCT
     :raises SCCTError: when there is an error getting the match details
     """
-    port = get_websocket_port()
+    profile = get_active_profile()
+
     match_details = None
     try:
-        LOG.debug("creating connection to scct websocket")
-        ws = create_connection(SCCT_SCORE_WEBSOCKET.format(port), timeout=1)
-        for _ in range(0, 3):
-            response = ws.recv()
-            LOG.debug("received response from websocket: %s", response)
-            response_json = json.loads(response)
-            if response_json["event"] == "ALL_DATA":
-                LOG.debug("found match details")
-                match_details = MatchDetails(
-                    response_json["data"]["team1"],
-                    response_json["data"]["team2"],
-                    response_json["data"]["bestof"],
-                    response_json["data"]["score1"],
-                    response_json["data"]["score2"],
-                )
-                break
-    except (ConnectionRefusedError, TimeoutError) as exp:
-        raise SCCTError("Could not connect to SCCT") from exp
-    except WebSocketTimeoutException as exp:
-        raise SCCTError("Connection to SCCT timed out") from exp
+        LOG.debug("getting scct match details")
+
+        bestof = int(profile.get_casting_data("bestof.txt")[2:])
+
+        match_details = MatchDetails(
+            profile.get_casting_data("team1.txt"),
+            profile.get_casting_data("team2.txt"),
+            bestof,
+            int(profile.get_casting_data("score1.txt")),
+            int(profile.get_casting_data("score2.txt")),
+            profile.get_casting_data("league.txt"),
+        )
+
     except ValueError as exp:
         raise SCCTError(f"Could not get data from SCCT: {exp}") from exp
 
@@ -104,37 +97,90 @@ def get_match_details() -> MatchDetails:
     return match_details
 
 
-def get_websocket_port() -> int:
-    """Attempts to find an open websocket port to use to get data from SCCT.
+@dataclass
+class Profile:
+    """Dataclass for storing profile details."""
 
-    :return: websocket port number
-    :raises SCCTError: if there is an error finding the port
+    profile_id: str
+    port: int
+
+    def __repr__(self) -> str:
+        """String representation of the Profile."""
+        return f'Profile(profile_id="{self.profile_id}",port="{self.port}")'
+
+    def __init__(self, profile_id: str) -> None:
+        """Initialise the Profile object.
+
+        :param profile_id: hex id of the profile
+        :raises ValueError: if the profile is not a valid hex number
+        """
+        self.profile_id = profile_id
+        try:
+            self.port = int(self.profile_id, 16)
+            LOG.debug("converted profile hex number to port number %s", self.port)
+        except ValueError as exp:
+            raise ValueError(f"could not get port info from profile: {self.profile_id}") from exp
+
+    def is_active(self) -> bool:
+        """Checks if the profile is active by checking its websocket port is open.
+
+        :return: True if the profile is active, False if not active
+        """
+
+        LOG.debug("checking if port is open for profile %s", self.profile_id)
+        LOG.debug("testing if port %s is open", self.port)
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+            sock.settimeout(SCCT_PORT_CHECK_TIMEOUT)
+            connect_result = sock.connect_ex(("127.0.0.1", self.port))
+            LOG.debug("connect result for port %s is %s", self.port, connect_result)
+            if connect_result == 0:
+                LOG.debug("port %s is open", self.port)
+                return True
+
+        LOG.debug("port %s is closed", self.port)
+        return False
+
+    def get_casting_data(self, filename: str) -> str:
+        """Gets data from a specific "casting_data" file.
+
+        :param filename: file to get data from e.g. league.txt
+        :return: contents of the file
+        :raises SCCTError: if the file is not found
+        """
+
+        data_file_path = os.path.normpath(
+            f"{SCCT_PROFILES_DIR}/{self.profile_id}/casting_data/{filename}"
+        )
+        try:
+            with open(data_file_path, "r+", encoding="utf-8") as data_file:
+                return str(data_file.read())
+        except FileNotFoundError as exp:
+            raise SCCTError(f"Could not get data from file {data_file_path}") from exp
+
+
+def get_active_profile() -> Profile:
+    """Attempts to find the currently active SCCT profile.
+
+    :return: currently active profile
+    :raises SCCTError: if the currently active profile can't be detected
     """
 
     LOG.debug("checking scct profiles directories")
     try:
-        profiles = os.listdir(SCCT_PROFILES_DIR)
+        profile_ids = os.listdir(SCCT_PROFILES_DIR)
     except FileNotFoundError as exp:
         raise SCCTError(f"could not get profile directories from {SCCT_PROFILES_DIR}") from exp
-    LOG.debug("profile directories: %s", profiles)
+    LOG.debug("profile directories: %s", profile_ids)
 
-    for profile in profiles:
-        LOG.debug("checking if port is open for profile %s", profile)
+    for profile_id in profile_ids:
         try:
-            port_num = int(profile, 16)
-            LOG.debug("converted profile hex number to port number %s", port_num)
-        except ValueError:
-            LOG.warning("could not get port info from profile: %s", profile)
+            profile = Profile(profile_id)
+        except ValueError as exp:
+            LOG.warning("invalid profile %s: %s", profile_id, exp)
             continue
 
-        LOG.debug("testing if port %s is open", port_num)
-        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
-            sock.settimeout(SCCT_PORT_CHECK_TIMEOUT)
-            connect_result = sock.connect_ex(("127.0.0.1", port_num))
-            LOG.debug("connect result for port %s is %s", port_num, connect_result)
-            if connect_result == 0:
-                LOG.debug("port %s is open", port_num)
-                return port_num
-            LOG.debug("port %s is closed", port_num)
+        LOG.debug("found profile: %s", profile)
+        if profile.is_active():
+            return profile
 
-    raise SCCTError("could not find any valid SCCT websocket ports")
+    raise SCCTError("could not find any active SCCT profile")
